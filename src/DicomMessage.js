@@ -11,6 +11,7 @@ import { DicomMetaDictionary } from "./DicomMetaDictionary.js";
 import { Tag } from "./Tag.js";
 import { log } from "./log.js";
 import { ValueRepresentation } from "./ValueRepresentation.js";
+import { ReadStream } from "fs";
 
 const singleVRs = ["SQ", "OF", "OW", "OB", "UN", "LT"];
 
@@ -188,6 +189,22 @@ class DicomMessage {
     }
 
     static readFile(
+        bufferOrStream,
+        options = {
+            ignoreErrors: false,
+            untilTag: null,
+            includeUntilTagValue: false,
+            noCopy: false
+        }
+    ) {
+        if (bufferOrStream instanceof ReadStream) {
+            return this._readFileStream(bufferOrStream, options);
+        }
+
+        return this._readFileBuffer(bufferOrStream, options);
+    }
+
+    static _readFileBuffer(
         buffer,
         options = {
             ignoreErrors: false,
@@ -236,6 +253,34 @@ class DicomMessage {
         dicomDict.dict = objects;
 
         return dicomDict;
+    }
+
+    static _readFileStream(
+        readableStream,
+        options = {
+            ignoreErrors: false,
+            untilTag: null,
+            includeUntilTagValue: false,
+            noCopy: false
+        }
+    ) {
+        var headerOffset = 128;
+        var headerEndByteIndex = headerOffset + 4;
+
+        var headerBytes = readableStream.read(headerEndByteIndex);
+
+        if (headerBytes === null) {
+            throw Error("Failed to extract header from file");
+        }
+
+        var dicomHeader = headerBytes.subArray(
+            headerOffset,
+            headerEndByteIndex
+        );
+
+        if (dicomHeader !== "DICM") {
+            throw new Error("Invalid DICOM file, expected header is missing");
+        }
     }
 
     static writeTagObject(stream, tagString, vr, values, syntax, writeOptions) {
